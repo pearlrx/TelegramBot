@@ -72,7 +72,7 @@ func (p *Processor) processMessage(event events.Event) error {
 		return e.Wrap("cant process message", err)
 	}
 
-	if err := p.doCmd(event.Text, meta.chatID, meta.Username); err != nil {
+	if err = p.doCmd(event.Text, meta.chatID, meta.Username); err != nil {
 		return e.Wrap("cant process message", err)
 	}
 	return nil

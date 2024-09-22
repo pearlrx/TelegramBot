@@ -18,26 +18,47 @@ const (
 func (p *Processor) doCmd(text string, chatID int, username string) error {
 	text = strings.TrimSpace(text)
 
-	log.Printf("gor new command '%s' from '%s'", text, username)
+	log.Printf("got new command '%s' from '%s'", text, username)
 
+	// Проверяем, если команда для добавления страницы
 	if isAddCmd(text) {
 		return p.savePage(chatID, text, username)
 	}
 
+	// Обрабатываем стандартные команды
 	switch text {
 	case RndCmd:
 		return p.sendRandom(chatID, username)
 	case HelpCmd:
 		return p.SendHelp(chatID)
 	case StartCmd:
-		return p.SendHello(chatID)
+		// Теперь при нажатии на старт добавляем пользователя в базу данных
+		return p.registerUser(chatID, username)
 	default:
 		return p.tg.SendMessage(chatID, msgUnknownCommand)
 	}
 }
 
+func (p *Processor) registerUser(chatID int, username string) error {
+	exists, err := p.storage.UserExists(username)
+	if err != nil {
+		return e.Wrap("can't check if user exists", err)
+	}
+
+	if exists {
+		return p.SendHello(chatID)
+	}
+
+	_, err = p.storage.CreateUser(username)
+	if err != nil {
+		return e.Wrap("can't register user", err)
+	}
+
+	return p.SendHello(chatID)
+}
+
 func (p *Processor) savePage(chatID int, pageURL string, username string) (err error) {
-	defer func() { err = e.WrapIfErr("cant do command: save message", err) }()
+	defer func() { err = e.WrapIfErr("can't do command: save message", err) }()
 
 	page := &storage.Page{
 		URL:      pageURL,
@@ -48,9 +69,9 @@ func (p *Processor) savePage(chatID int, pageURL string, username string) (err e
 		return err
 	}
 	if isExist {
-
 		return p.tg.SendMessage(chatID, msgAlreadyExists)
 	}
+
 	if err := p.storage.Save(page); err != nil {
 		return err
 	}
@@ -62,7 +83,7 @@ func (p *Processor) savePage(chatID int, pageURL string, username string) (err e
 }
 
 func (p *Processor) sendRandom(chatID int, username string) (err error) {
-	defer func() { err = e.WrapIfErr("cant do command: cant send random", err) }()
+	defer func() { err = e.WrapIfErr("can't do command: can't send random", err) }()
 
 	page, err := p.storage.PickRandom(username)
 	if err != nil && !errors.Is(err, storage.ErrNoSavedPages) {
