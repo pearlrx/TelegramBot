@@ -6,12 +6,16 @@ import (
 	"TelegramBot/lib/e"
 	"TelegramBot/storage"
 	"errors"
+	"time"
 )
 
 type Processor struct {
-	tg      *telegram.Client
-	offset  int
-	storage storage.Storage
+	tg                  *telegram.Client
+	offset              int
+	storage             storage.Storage
+	spamProtection      map[int]time.Time
+	canSendMessage      bool
+	spamProtectionCount map[int]int
 }
 
 type Meta struct {
@@ -26,10 +30,13 @@ var (
 
 func New(client *telegram.Client, storage storage.Storage) *Processor {
 	return &Processor{
-		tg:      client,
-		storage: storage,
+		tg:                  client,
+		storage:             storage,
+		spamProtection:      make(map[int]time.Time),
+		spamProtectionCount: make(map[int]int),
 	}
 }
+
 func (p *Processor) Fetch(limit, offset int) ([]events.Event, error) {
 	updates, err := p.tg.Updates(p.offset, limit)
 	if err != nil {
@@ -100,12 +107,14 @@ func event(upd telegram.Update) events.Event {
 	}
 	return res
 }
+
 func fetchText(upd telegram.Update) string {
 	if upd.Message == nil {
 		return ""
 	}
 	return upd.Message.Text
 }
+
 func fetchType(upd telegram.Update) events.Type {
 	if upd.Message == nil {
 		return events.Unknown

@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/url"
 	"strings"
+	"time"
 )
 
 const (
@@ -25,16 +26,27 @@ func (p *Processor) doCmd(text string, chatID int, username string) error {
 		return p.savePage(chatID, text, username)
 	}
 
-	// Обрабатываем стандартные команды
+	// Обрабатываем команду с защитой от спама
 	switch text {
+	case StartCmd:
+		if p.isSpam(chatID) {
+			return p.tg.SendMessage(chatID, "Слишком частые запросы. Попробуйте позже.")
+		}
+		return p.registerUser(chatID, username)
 	case RndCmd:
+		if p.isSpam(chatID) {
+			return p.tg.SendMessage(chatID, "Слишком частые запросы. Попробуйте позже.")
+		}
 		return p.sendRandom(chatID, username)
 	case HelpCmd:
+		if p.isSpam(chatID) {
+			return p.tg.SendMessage(chatID, "Слишком частые запросы. Попробуйте позже.")
+		}
 		return p.SendHelp(chatID)
-	case StartCmd:
-		// Теперь при нажатии на старт добавляем пользователя в базу данных
-		return p.registerUser(chatID, username)
 	default:
+		if p.isSpam(chatID) {
+			return p.tg.SendMessage(chatID, "Слишком частые запросы. Попробуйте позже.")
+		}
 		return p.tg.SendMessage(chatID, msgUnknownCommand)
 	}
 }
@@ -98,6 +110,26 @@ func (p *Processor) sendRandom(chatID int, username string) (err error) {
 	}
 
 	return p.storage.Remove(page)
+}
+
+func (p *Processor) isSpam(chatID int) bool {
+	log.Printf("Checking for spam: chatID %d", chatID)
+	lastMessageTime, found := p.spamProtection[chatID]
+
+	if !found {
+		p.spamProtection[chatID] = time.Now()
+		log.Printf("Not found. Setting lastMessageTime to now for chatID %d", chatID)
+		return false
+	}
+
+	if time.Since(lastMessageTime) < 500*time.Millisecond {
+		log.Printf("Spam detected for chatID %d", chatID)
+		return true
+	}
+
+	p.spamProtection[chatID] = time.Now()
+	log.Printf("Spam protection passed for chatID %d", chatID)
+	return false
 }
 
 func (p *Processor) SendHelp(chatID int) error {
