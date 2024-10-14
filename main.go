@@ -19,25 +19,22 @@ const (
 )
 
 func main() {
-	// Загружаем переменные окружения из .env
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
 
-	// Подключаемся к PostgreSQL
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Fatal("Unable to connect to database:", err)
 	}
 	defer conn.Close(context.Background())
 
-	// Инициализация PostgreSQL хранилища
-	storage := postgres.New(conn) // Передаем соединение conn
+	storage := postgres.New(conn)
 
 	eventsProcessor := telegram.New(
 		tgClient.New(tgBotHost, mustToken()),
-		storage, // Передаём PostgreSQL хранилище
+		storage,
 	)
 
 	log.Print("service started")

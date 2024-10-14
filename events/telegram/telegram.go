@@ -16,6 +16,7 @@ type Processor struct {
 	spamProtection      map[int]time.Time
 	canSendMessage      bool
 	spamProtectionCount map[int]int
+	cooldownProtection  map[int]time.Time
 }
 
 type Meta struct {
@@ -34,6 +35,7 @@ func New(client *telegram.Client, storage storage.Storage) *Processor {
 		storage:             storage,
 		spamProtection:      make(map[int]time.Time),
 		spamProtectionCount: make(map[int]int),
+		cooldownProtection:  make(map[int]time.Time),
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"TelegramBot/lib/e"
 	"TelegramBot/storage"
 	"errors"
+	"fmt"
 	"log"
 	"net/url"
 	"strings"
@@ -84,11 +85,11 @@ func (p *Processor) savePage(chatID int, pageURL string, username string) (err e
 		return p.tg.SendMessage(chatID, msgAlreadyExists)
 	}
 
-	if err := p.storage.Save(page); err != nil {
+	if err = p.storage.Save(page); err != nil {
 		return err
 	}
 
-	if err := p.tg.SendMessage(chatID, msgSaved); err != nil {
+	if err = p.tg.SendMessage(chatID, msgSaved); err != nil {
 		return err
 	}
 	return nil
@@ -97,24 +98,47 @@ func (p *Processor) savePage(chatID int, pageURL string, username string) (err e
 func (p *Processor) sendRandom(chatID int, username string) (err error) {
 	defer func() { err = e.WrapIfErr("can't do command: can't send random", err) }()
 
+	// Attempt to pick a random page for the user
 	page, err := p.storage.PickRandom(username)
-	if err != nil && !errors.Is(err, storage.ErrNoSavedPages) {
-		return err
-	}
-	if errors.Is(err, storage.ErrNoSavedPages) {
-		return p.tg.SendMessage(chatID, msgNoSavedPages)
-	}
-
-	if err := p.tg.SendMessage(chatID, page.URL); err != nil {
-		return err
+	if err != nil {
+		if errors.Is(err, storage.ErrNoSavedPages) {
+			// If no saved pages, inform the user
+			return p.tg.SendMessage(chatID, msgNoSavedPages)
+		}
+		return err // Return any other error
 	}
 
+	// Send the URL and the title to the user
+	message := fmt.Sprintf("Вот ваша случайная ссылка из текста:\nНазвание: %s\nURL: %s", page.Title, page.URL)
+	if err = p.tg.SendMessage(chatID, message); err != nil {
+		return err // Handle error when sending the message
+	}
+
+	// Remove the page after sending it
 	return p.storage.Remove(page)
+}
+
+func (p *Processor) handleRandomCommand(chatID int, userName string) error {
+	page, err := p.storage.PickRandom(userName)
+	if err != nil {
+		return fmt.Errorf("could not fetch a random page: %v", err)
+	}
+
+	response := fmt.Sprintf("Here's a random link for you: %s\nTitle: %s", page.URL, page.Title)
+	return p.tg.SendMessage(chatID, response)
 }
 
 func (p *Processor) isSpam(chatID int) bool {
 	log.Printf("Checking for spam: chatID %d", chatID)
 	lastMessageTime, found := p.spamProtection[chatID]
+
+	if cooldownEndTime, blocked := p.cooldownProtection[chatID]; blocked {
+		if time.Now().Before(cooldownEndTime) {
+			log.Printf("User %d is in cooldown until %v", chatID, cooldownEndTime)
+			return true
+		}
+		delete(p.cooldownProtection, chatID)
+	}
 
 	if !found {
 		p.spamProtection[chatID] = time.Now()
@@ -124,6 +148,8 @@ func (p *Processor) isSpam(chatID int) bool {
 
 	if time.Since(lastMessageTime) < 500*time.Millisecond {
 		log.Printf("Spam detected for chatID %d", chatID)
+		p.cooldownProtection[chatID] = time.Now().Add(10 * time.Second)
+		log.Printf("User %d is set to cooldown for 10 seconds", chatID)
 		return true
 	}
 
